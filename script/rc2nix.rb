@@ -54,6 +54,7 @@ module Rc2Nix
     "ffmpegthumbsrc",
     "kservicemenurc",
     "kiorc",
+    "plasma-org.kde.plasma.desktop-appletsrc",
   ].map {|f| File.expand_path(f, XDG_CONFIG_HOME)}.freeze
 
   ##############################################################################
@@ -84,7 +85,6 @@ module Rc2Nix
       /^activate widget \d+$/, # Depends on state :(
       /^ColorScheme(Hash)?$/,
       /^History Items/,
-      /^LookAndFeelPackage$/,
       /^Recent (Files|URLs)/,
       /^Theme$/i,
       /^Version$/,
