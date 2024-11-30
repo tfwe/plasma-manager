@@ -56,6 +56,11 @@ let
     names:
     builtins.listToAttrs (lib.imap1 (i: v: (lib.nameValuePair "Name_${builtins.toString i}" v)) names);
 
+
+  virtualDesktopIdAttrs =
+    number:
+    builtins.listToAttrs (map (i: (lib.nameValuePair "Id_${builtins.toString i}" "Desktop_${builtins.toString i}")) (lib.range 1 number));
+
   capitalizeWord =
     word:
     let
@@ -710,7 +715,10 @@ in
 
           # Virtual Desktops
           (lib.mkIf (cfg.kwin.virtualDesktops.number != null) {
-            Desktops.Number = cfg.kwin.virtualDesktops.number;
+            Desktops = lib.mkMerge [
+              { Number = cfg.kwin.virtualDesktops.number; }
+              (virtualDesktopIdAttrs cfg.kwin.virtualDesktops.number)
+            ];
           })
           (lib.mkIf (cfg.kwin.virtualDesktops.rows != null) {
             Desktops.Rows = cfg.kwin.virtualDesktops.rows;
@@ -718,6 +726,7 @@ in
           (lib.mkIf (cfg.kwin.virtualDesktops.names != null) {
             Desktops = lib.mkMerge [
               { Number = builtins.length cfg.kwin.virtualDesktops.names; }
+              (virtualDesktopIdAttrs (builtins.length cfg.kwin.virtualDesktops.names))
               (virtualDesktopNameAttrs cfg.kwin.virtualDesktops.names)
             ];
           })
