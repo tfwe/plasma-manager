@@ -2,13 +2,14 @@
   description = "Manage KDE Plasma with Home Manager";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-22.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-    home-manager.url = "github:nix-community/home-manager/release-22.05";
+    home-manager.url = "github:nix-community/home-manager";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = inputs@{ self, ... }:
+  outputs =
+    inputs@{ self, ... }:
     let
       # Systems that can run tests:
       supportedSystems = [
@@ -21,39 +22,49 @@
       forAllSystems = inputs.nixpkgs.lib.genAttrs supportedSystems;
 
       # Attribute set of nixpkgs for each system:
-      nixpkgsFor = forAllSystems (system:
-        import inputs.nixpkgs { inherit system; });
+      nixpkgsFor = forAllSystems (system: import inputs.nixpkgs { inherit system; });
     in
     {
-      homeManagerModules.plasma-manager = { ... }: {
-        imports = [ ./modules ];
-      };
+      homeManagerModules.plasma-manager =
+        { ... }:
+        {
+          imports = [ ./modules ];
+        };
 
-      packages = forAllSystems (system:
-        let pkgs = nixpkgsFor.${system}; in
+      packages = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgsFor.${system};
+          docs = import ./docs {
+            inherit pkgs;
+            lib = pkgs.lib;
+          };
+        in
         {
           default = self.packages.${system}.rc2nix;
 
-          demo = (inputs.nixpkgs.lib.nixosSystem {
-            inherit system;
-            modules = [
-              (import test/demo.nix {
-                pkgs = nixpkgsFor.x86_64-linux;
-                home-manager = inputs.home-manager;
-                module = self.homeManagerModules.plasma-manager;
-                extraPackages = with self.packages.${system}; [
-                  rc2nix
-                ];
-              })
-            ];
-          }).config.system.build.vm;
+          demo =
+            (inputs.nixpkgs.lib.nixosSystem {
+              inherit system;
+              modules = [
+                (import test/demo.nix {
+                  home-manager-module = inputs.home-manager.nixosModules.home-manager;
+                  plasma-module = self.homeManagerModules.plasma-manager;
+                })
+                (_: { environment.systemPackages = [ self.packages.${system}.rc2nix ]; })
+              ];
+            }).config.system.build.vm;
+
+          docs-html = docs.html;
+          docs-json = docs.json;
 
           rc2nix = pkgs.writeShellApplication {
             name = "rc2nix";
-            runtimeInputs = with pkgs; [ ruby ];
-            text = ''ruby ${script/rc2nix.rb} "$@"'';
+            runtimeInputs = with pkgs; [ python3 ];
+            text = ''python3 ${script/rc2nix.py} "$@"'';
           };
-        });
+        }
+      );
 
       apps = forAllSystems (system: {
         default = self.apps.${system}.rc2nix;
@@ -69,23 +80,26 @@
         };
       });
 
-      checks = forAllSystems (system:
-        let
-          test = path: import path {
-            pkgs = nixpkgsFor.${system};
-            home-manager = inputs.home-manager;
-            module = self.homeManagerModules.plasma-manager;
-          };
-        in
-        {
-          default = test ./test/basic.nix;
-        });
+      checks = forAllSystems (system: {
+        default = nixpkgsFor.${system}.callPackage ./test/basic.nix {
+          home-manager-module = inputs.home-manager.nixosModules.home-manager;
+          plasma-module = self.homeManagerModules.plasma-manager;
+        };
+      });
+
+      formatter = forAllSystems (system: nixpkgsFor.${system}.treefmt);
 
       devShells = forAllSystems (system: {
         default = nixpkgsFor.${system}.mkShell {
           buildInputs = with nixpkgsFor.${system}; [
+            nixfmt-rfc-style
             ruby
             ruby.devdoc
+            (python3.withPackages (pyPkgs: [
+              pyPkgs.python-lsp-server
+              pyPkgs.black
+              pyPkgs.isort
+            ]))
           ];
         };
       });
